@@ -1,10 +1,12 @@
-name: WeRead Bot - Manual Validation
+name: WeRead Bot - Daily Reading
 
 on:
+  schedule:
+    - cron: '0 0 * * *' # UTC 00:00 = 北京时间 08:00
   workflow_dispatch:
     inputs:
       target_duration:
-        description: '测试阅读时长（分钟）'
+        description: '手动运行的阅读时长（分钟）'
         required: false
         default: '5-10'
         type: string
@@ -13,16 +15,16 @@ permissions:
   contents: read
 
 jobs:
-  manual-validation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  daily-reading:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
 
@@ -31,15 +33,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Create test configuration
+      - name: Resolve runtime parameters
         env:
-          TARGET_DURATION: ${{ inputs.target_duration || '5-10' }}
+          INPUT_TARGET_DURATION: ${{ inputs.target_duration }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            target_duration="60-90"
+            startup_delay="600-1800"
+          else
+            target_duration="${INPUT_TARGET_DURATION:-5-10}"
+            startup_delay="1-2"
+          fi
+
+          echo "TARGET_DURATION=${target_duration}" >> "$GITHUB_ENV"
+          echo "STARTUP_DELAY=${startup_delay}" >> "$GITHUB_ENV"
+
+      - name: Create runtime configuration
         run: |
           cat > config.yaml <<EOF
           app:
             name: "WeReadBot-GitHub-Action"
             startup_mode: "immediate"
-            startup_delay: "1-2"
+            startup_delay: "${STARTUP_DELAY}"
 
           reading:
             mode: "smart_random"
@@ -68,10 +83,10 @@ jobs:
           notification:
             enabled: true
             include_statistics: true
-            only_on_failure: false
+            only_on_failure: true
             triggers:
-              session_success: true
-              multi_user_summary: true
+              session_success: false
+              multi_user_summary: false
               session_failure: true
               runtime_error: true
               general: true
@@ -91,10 +106,10 @@ jobs:
             persist_runtime_error: false
           EOF
 
-      - name: Run validation
+      - name: Run WeRead Bot
         env:
           WEREAD_CURL_STRING: ${{ secrets.WEREAD_CURL_STRING }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          NOTIFICATION_ONLY_ON_FAILURE: 'false'
+          NOTIFICATION_ONLY_ON_FAILURE: 'true'
           TZ: Asia/Shanghai
         run: python weread-bot.py --config config.yaml
