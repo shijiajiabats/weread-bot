@@ -2,7 +2,7 @@ name: WeRead Bot - Daily Reading
 
 on:
   schedule:
-    - cron: '0 0 * * *' # UTC 00:00 = 北京时间 08:00
+    - cron: '47 22 * * *' # UTC 22:47 = 次日北京时间 06:47；随机延迟后约 06:57-07:17 开始
   workflow_dispatch:
     inputs:
       target_duration:
